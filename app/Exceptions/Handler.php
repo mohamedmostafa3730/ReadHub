@@ -1,33 +1,93 @@
 <?php
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Access\AuthorizationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 
-public function register(): void
+public function render($request, Throwable $exception)
 {
-    $this->renderable(function (NotFoundHttpException $e, $request) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Route not found'
-        ], 404);
-    });
+    if ($request->is('api/*') || $request->expectsJson()) {
 
-    $this->renderable(function (ModelNotFoundException $e, $request) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Resource not found'
-        ], 404);
-    });
+        if ($exception instanceof ModelNotFoundException) {
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    'message' => 'Resource not found',
+                    'code' => 404,
+                ],
+            ], 404);
+        }
 
-    $this->renderable(function (ValidationException $e, $request) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Validation failed',
-            'errors' => $e->errors()
-        ], 422);
-    });
+        if ($exception instanceof AuthenticationException) {
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    'message' => 'Unauthenticated',
+                    'code' => 401,
+                ],
+            ], 401);
+        }
 
-    $this->renderable(function (ApiException $e, $request) {
+        if ($exception instanceof AuthorizationException) {
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    'message' => 'Forbidden',
+                    'code' => 403,
+                ],
+            ], 403);
+        }
+
+        if ($exception instanceof ValidationException) {
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    'message' => 'Validation failed',
+                    'fields' => $exception->errors(),
+                    'code' => 422,
+                ],
+            ], 422);
+        }
+
+        if ($exception instanceof HttpExceptionInterface) {
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'meta' => null,
+                'errors' => [
+                    'message' => match ($exception->getStatusCode()) {
+                        401 => 'Unauthenticated',
+                        403 => 'Forbidden',
+                        404 => 'Resource not found',
+                        default => 'HTTP error',
+                    },
+                    'code' => $exception->getStatusCode(),
+                ],
+            ], $exception->getStatusCode());
+        }
+
         return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage()
-        ], $e->getCode() ?: 400);
-    });
+            'success' => false,
+            'data' => null,
+            'meta' => null,
+            'errors' => [
+                'message' => config('app.debug')
+                    ? $exception->getMessage()
+                    : 'Internal Server Error',
+                'code' => 500,
+            ],
+        ], 500);
+    }
+
+    return parent::render($request, $exception);
 }

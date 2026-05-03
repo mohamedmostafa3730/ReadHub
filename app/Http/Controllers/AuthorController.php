@@ -5,20 +5,45 @@ namespace App\Http\Controllers;
 use App\Exceptions\CustomException;
 use App\Http\Requests\StoreAuthorRequest;
 use App\Http\Requests\UpdateAuthorRequest;
+use App\Http\Resources\Author\UserResource as ResourcesAuthorUserResource;
+use App\Http\Resources\Author\UsersResource as AuthorUserResource;
+use App\Http\Resources\UserResource;
 use App\Models\Author;
+use App\support\ApiResponseBuilder;
 
 class AuthorController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
+    // with builder design pattern
+    // public function index()
+    // {
+    //     $authors = Author::all();
+    //     if ($authors != null) {
+    //         return ApiResponseBuilder::success()
+    //             ->data(UserResource::collection($authors))
+    //             ->status(200)
+    //             ->build();
+    //     }
+    //     return ApiResponseBuilder::error('data not fond')
+    //         ->status(404)
+    //         ->build();
+    // }
+
+    // with Response Macro
     public function index()
     {
         $authors = Author::paginate(5);
-        if ($authors->isEmpty()) {
-            throw new CustomException('No authors found', 200);
-        }
-        return response()->json($authors, 200);
+
+        return response()->api([
+            'data' => AuthorUserResource::collection($authors->items()),
+            'meta' => [
+                'current_page' => $authors->currentPage(),
+                'last_page' => $authors->lastPage(),
+                'total' => $authors->total(),
+            ]
+        ]);
     }
 
     /**
@@ -27,7 +52,10 @@ class AuthorController extends Controller
     public function store(StoreAuthorRequest $request)
     {
         $author = Author::create($request->validated());
-        return response()->json($author, 201);
+        return response()->api([
+            'data' => new AuthorUserResource($author)
+        ]);
+        // return response()->json($author, 201);
     }
 
     /**
@@ -35,11 +63,10 @@ class AuthorController extends Controller
      */
     public function show(string $id)
     {
-        $author = Author::find($id);
-        if (!$author) {
-            throw new CustomException('Book with ID {$id} not found', 200);
-        }
-        return response()->json($author, 200);
+        $author = Author::findOrFail($id);
+        return response()->api([
+            'data' =>  new AuthorUserResource($author),
+        ]);
     }
 
     /**
